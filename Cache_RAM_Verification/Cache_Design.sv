@@ -1,6 +1,4 @@
 `include "cache_package.sv"
-`include "ram.sv"
-`include "cache_ram_interface.sv"
 
 module cache_mem(input w_e, clk, [31:0] cpu_address, [31:0] cpu_data, [31:0] mem_to_cache_data, output reg [31:0] cache_data_out, cache_to_mem_data, wire[31:0] cache_to_mem_address, wire wr_mem);
   
