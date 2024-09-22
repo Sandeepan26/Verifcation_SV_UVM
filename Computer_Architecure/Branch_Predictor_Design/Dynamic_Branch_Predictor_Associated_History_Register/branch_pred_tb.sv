@@ -1,3 +1,4 @@
+`include "branch_predictor.sv"
 module tb;
   
   reg br;
