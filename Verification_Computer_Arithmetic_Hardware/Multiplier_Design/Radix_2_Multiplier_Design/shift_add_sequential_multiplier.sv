@@ -34,7 +34,6 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
     	end : generate_signed_adders
     end
     
-    
   always_comb begin : set_carry_bits
     if(sign_op == 1'b0)
       begin
@@ -105,45 +104,42 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
             
             if(sign_multiplier == 1'b0) begin
             	 mux_val <= multiplier_reg[0] ? multiplicand : 'b0;
-                {partial_product[62:31], signed_partial_product[62:31]} <= {sum_out[31:0], {32{1'b0}}};
-                {partial_product[63], signed_partial_product[63]} <= {carry_out[31], 1'b0};
+              {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {sum_out[(num_bits-1):0], {num_bits{1'b0}}};
+              {partial_product[((2*num_bits)-1)], signed_partial_product[((2*num_bits)-1)]} <= {carry_out[(num_bits-1)], 1'b0};
             end
             
             else begin
             	if(multiplier_booth_recoded[0] == 2'b11) begin
                   signed_mux_val <= (twos_complement(signed_multiplicand));
-                  {partial_product[62:31], signed_partial_product[62:31]} <= {{32{1'b0}},((signed_sum_out[31:0]))};
-                  {partial_product[63], signed_partial_product[63]} <= {1'b0,$signed(carry_out[31])};
+                  {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {{num_bits{1'b0}},((signed_sum_out[(num_bits-1):0]))};
+                  {partial_product[((2*num_bits)-1)], signed_partial_product[((2*num_bits)-1)]} <= {1'b0,$signed(carry_out[(num_bits-1)])};
               	end
               	else if(multiplier_booth_recoded[0] == 2'b01) begin
                   signed_mux_val <= $signed(signed_multiplicand);
-                  {partial_product[62:31], signed_partial_product[62:31]} <= {{32{1'b0}},($signed(signed_sum_out[31:0]))};
-                  {partial_product[63], signed_partial_product[63]} <= {1'b0,$signed(carry_out[31])};
+                  {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {{num_bits{1'b0}},($signed(signed_sum_out[(num_bits-1):0]))};
+                  {partial_product[((2*num_bits)-1)], signed_partial_product[((2*num_bits)-1)]} <= {1'b0,$signed(carry_out[(num_bits-1)])};
               	end
               	else begin
                 	signed_mux_val <= ('b0); 
-                  {partial_product[62:31], signed_partial_product[62:31]} <= {{32{1'b0}}, $signed(signed_sum_out[31:0])};
-                  {partial_product[63], signed_partial_product[63]} <= {{32{1'b0}},$signed(signed_carry_out[31])};
+                  {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {{num_bits{1'b0}}, $signed(signed_sum_out[(num_bits-1):0])};
+                  {partial_product[((2*num_bits)-1)], signed_partial_product[((2*num_bits)-1)]} <= {{num_bits{1'b0}},$signed(signed_carry_out[(num_bits-1)])};
             	end
             end
               
-            
       			count <= count + 1'b1;
-            	OP <= SHIFT;
+            OP <= SHIFT;
             
         	end
           	else OP <= RES;
          end
-      
+    
       	RES: begin
-          {result, signed_result} <= sign_multiplier ? {{32{1'b0}}, ($signed(signed_partial_product[31:0]))} : {partial_product[31:0], {32{1'b0}}};
+          {result, signed_result} <= sign_multiplier ? {{num_bits{1'b0}}, ($signed(signed_partial_product[(num_bits-1):0]))} : {partial_product[31:0], {num_bits{1'b0}}};
         	OP <= IDLE;
-            end
-        
+            end   
     endcase
     
   end : multiplication
-  
   
   always @(negedge clk) begin : shift_operation
     if(OP == SHIFT) begin
@@ -162,12 +158,8 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
         end  //else
           
       	OP <= ADD;
-    end // OP == SHIFT
-    
+    end // OP == SHIFT  
       
   end : shift_operation
-  
-  
- 
-  
+    
 endmodule
