@@ -1,4 +1,5 @@
 `include "full_adder.v"
+
 module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bit sign_op = 0)(input clk, load, bit sign_multiplicand, bit sign_multiplier, wire [(num_bits-1):0] multiplicand,  multiplier , signed [(num_bits-1) : 0] signed_multiplicand, signed_multiplier, output reg [(num_bits-1):0] result, reg signed [(num_bits-1):0] signed_result);
   
   reg [((2*num_bits)-1):0] partial_product;
@@ -6,7 +7,7 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
   
   reg [(num_bits-1):0] multiplier_reg;   //Second operand stored for shifting
   reg signed[(num_bits-1):0][1:0] multiplier_booth_recoded;  //register to store booth recoded version of signed multiplier
-  reg [(num_bits-1):0][1:0] multiplicand_booth_recoded; //booth recode for signed multiplicand
+  reg [(num_bits/2):0][2:0] multiplicand_booth_recoded; //booth recode for signed multiplicand
   
   reg [($clog2(num_bits)):0] count;  //counter for tracking shifting and addition of partial product with multiplier;
   
@@ -74,17 +75,74 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
   
   /*---------Function for Booth Recoding/Encoding -------------- */
   
-  function automatic bit signed [(num_bits-1) : 0] [1:0] booth_encoder ([(num_bits-1):0] val);
-    for(int i = 0; i <= num_bits-1 ; i++) begin
-      case({val[i+1],val[i]})
-        2'b00 : booth_encoder[i] = 2'b00;
-        2'b01 : booth_encoder[i] = 2'b01;
-        2'b10 : booth_encoder[i] = 2'b11;  //-1
-        2'b11 : booth_encoder[i] = 2'b00;
+  function automatic bit signed[(num_bits - 1): 0][3:0] booth_encoder([(num_bits-1):0] val);
+    for(int i = 0; i <= num_bits-3 ; i++) begin
+      case({val[i+2],val[i+1],val[i]})
+        3'b000 : booth_encoder[i] = 4'b00_00;
+        3'b001 : booth_encoder[i] = 4'b00_01;
+        3'b010 : booth_encoder[i] = 4'b01_11;  //1, -1
+        3'b011 : booth_encoder[i] = 4'b01_00;
+        3'b100 : booth_encoder[i] = 4'b11_00;
+        3'b101 : booth_encoder[i] = 4'b11_01;
+        3'b110 : booth_encoder[i] = 4'b00_11;
+        3'b111 : booth_encoder[i] = 4'b00_00;
+        default: booth_encoder[i] = 0;
       endcase
     end
     
     return booth_encoder;
+  endfunction
+  
+  //function for modified booth encoder
+  
+  function automatic bit signed [(num_bits/2):0][2:0] modif_booth(input bit [(num_bits-1):0][3:0] v);
+  	for(int k = 0; k <= (num_bits-1); k++) begin
+      case (v[k])
+        4'b0000 : begin
+          case(k)
+            0: modif_booth[0] = 3'b000;
+            default: modif_booth[((k/2)+1)] = 3'b000;
+          endcase
+        end
+        4'b0001 : begin
+          case(k)
+            0: modif_booth[0] = 3'b001;
+            default: modif_booth[((k/2)+1)] = 3'b001;
+          endcase
+        end
+        4'b0111 : begin
+          case(k)
+            0: modif_booth[0] = 3'b001;
+            default: modif_booth[((k/2)+1)] = 3'b001;
+          endcase
+        end
+        4'b0100: begin
+          case(k)
+            0: modif_booth[0] = 3'b010;
+            default: modif_booth[((k/2)+1)] = 3'b010;
+          endcase
+        end
+        4'b1100: begin
+          case(k)
+            0: modif_booth[0] = 3'b110;
+            default: modif_booth[((k/2)+1)] = 3'b110;
+          endcase
+        end
+        4'b1101: begin
+          case(k)
+            0: modif_booth[0] = 3'b101;
+            default: modif_booth[((k/2)+1)] = 3'b111;
+          endcase
+        end
+        4'b0011: begin
+          case(k)
+            0: modif_booth[0] = 3'b101;
+            default: modif_booth[((k/2)+1)] = 3'b111;
+          endcase
+        end
+        default: modif_booth[(k/2)+1] = 0; //default value
+      endcase
+    end
   endfunction
 /*-----------------Booth Encoder enclosed--------------------------- */    
   
@@ -109,7 +167,7 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
       
     	LOAD: begin
           	multiplier_reg <= (~sign_multiplier) ? multiplier : 'b0;
-          	multiplier_booth_recoded <= sign_multiplier ? booth_encoder(signed_multiplier) : 'b0;
+          	multiplier_booth_recoded <= sign_multiplier ? modif_booth(booth_encoder(signed_multiplier)) : 'b0;
             multiplicand_adder <= (multiplicand << 1); //2* multiplicand
           	OP <= ADD;
     	end
@@ -124,16 +182,27 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
             end
             
             else begin
-            	if(multiplier_booth_recoded[0] == 2'b11) begin
-                  signed_mux_val <= (twos_complement(signed_multiplicand));
+            	if(multiplier_booth_recoded[0] == 3'b110) begin
+                  signed_mux_val <= (twos_complement(signed_multiplicand) <<< 1); //x (-2)
                   {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {{num_bits{1'b0}},((signed_sum_out[(num_bits-1):0]))};
                   {partial_product[((2*num_bits)-1)], signed_partial_product[((2*num_bits)-1)]} <= {1'b0,$signed(carry_out[(num_bits-1)])};
               	end
-              	else if(multiplier_booth_recoded[0] == 2'b01) begin
-                  signed_mux_val <= $signed(signed_multiplicand);
+              	else if(multiplier_booth_recoded[0] == 3'b010) begin
+                  signed_mux_val <= ($signed(signed_multiplicand) <<< 1);   // x (2)
                   {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {{num_bits{1'b0}},($signed(signed_sum_out[(num_bits-1):0]))};
                   {partial_product[((2*num_bits)-1)], signed_partial_product[((2*num_bits)-1)]} <= {1'b0,$signed(carry_out[(num_bits-1)])};
               	end
+              	else if(multiplier_booth_recoded[0] == 3'b001) begin
+                  signed_mux_val <= ($signed(signed_multiplicand));   // x (1)
+                  {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {{num_bits{1'b0}},($signed(signed_sum_out[(num_bits-1):0]))};
+                  {partial_product[((2*num_bits)-1)], signed_partial_product[((2*num_bits)-1)]} <= {1'b0,$signed(carry_out[(num_bits-1)])};
+              	end
+              	else if(multiplier_booth_recoded[0] == 3'b111) begin
+                  signed_mux_val <= (twos_complement(signed_multiplicand));   // x (-1)
+                  {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {{num_bits{1'b0}},($signed(signed_sum_out[(num_bits-1):0]))};
+                  {partial_product[((2*num_bits)-1)], signed_partial_product[((2*num_bits)-1)]} <= {1'b0,$signed(carry_out[(num_bits-1)])};
+              	end
+              	
               	else begin
                 	signed_mux_val <= ('b0); 
                   {partial_product[(2*(num_bits-1)):(num_bits-1)], signed_partial_product[(2*(num_bits-1)):(num_bits-1)]} <= {{num_bits{1'b0}}, $signed(signed_sum_out[(num_bits-1):0])};
@@ -171,7 +240,7 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
         else begin
           if(count <= 31) begin
                 signed_partial_product <= (signed_partial_product >> 1);
-        		multiplier_booth_recoded <= multiplier_booth_recoded >> 2;
+        		multiplier_booth_recoded <= multiplier_booth_recoded >> 3;
         	end //if count
         end  //else
           
@@ -180,6 +249,11 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
     
       
   end : shift_operation
+  
+  
+ 
+  
+endmodule
   
   
  
