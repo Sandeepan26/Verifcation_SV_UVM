@@ -75,17 +75,17 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
   
   /*---------Function for Booth Recoding/Encoding -------------- */
   
-  function automatic bit signed[(num_bits - 1): 0][3:0] booth_encoder([(num_bits-1):0] val);
+    function automatic bit signed[(num_bits - 1): 0][3:0] booth_encoder([(num_bits-1):0] val);
     for(int i = 0; i <= num_bits-3 ; i++) begin
       case({val[i+2],val[i+1],val[i]})
-        3'b000 : booth_encoder[i] = 4'b00_00;
-        3'b001 : booth_encoder[i] = 4'b00_01;
-        3'b010 : booth_encoder[i] = 4'b01_11;  //1, -1
-        3'b011 : booth_encoder[i] = 4'b01_00;
-        3'b100 : booth_encoder[i] = 4'b11_00;
-        3'b101 : booth_encoder[i] = 4'b11_01;
-        3'b110 : booth_encoder[i] = 4'b00_11;
-        3'b111 : booth_encoder[i] = 4'b00_00;
+        3'b000 : {booth_encoder[i+2], booth_encoder[i+1]} = 4'b00_00;
+        3'b001 : {booth_encoder[i+2], booth_encoder[i+1]} = 4'b00_01;
+        3'b010 : {booth_encoder[i+2], booth_encoder[i+1]} = 4'b01_11;  //1, -1
+        3'b011 : {booth_encoder[i+2], booth_encoder[i+1]} = 4'b01_00;
+        3'b100 : {booth_encoder[i+2], booth_encoder[i+1]} = 4'b11_00;
+        3'b101 : {booth_encoder[i+2], booth_encoder[i+1]} = 4'b11_01;
+        3'b110 : {booth_encoder[i+2], booth_encoder[i+1]} = 4'b00_11;
+        3'b111 : {booth_encoder[i+2], booth_encoder[i+1]} = 4'b00_00;
         default: booth_encoder[i] = 0;
       endcase
     end
@@ -93,11 +93,11 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
     return booth_encoder;
   endfunction
   
-  //function for modified booth encoder
   
-  function automatic bit signed [(num_bits/2):0][2:0] modif_booth(input bit [(num_bits-1):0][3:0] v);
+  
+  function automatic bit signed [16:0][2:0] modif_booth(input bit [(num_bits-1):0][3:0] v);
   	for(int k = 0; k <= (num_bits-1); k++) begin
-      case (v[k])
+      case ({v[k+1],v[k]})
         4'b0000 : begin
           case(k)
             0: modif_booth[0] = 3'b000;
@@ -131,13 +131,13 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
         4'b1101: begin
           case(k)
             0: modif_booth[0] = 3'b101;
-            default: modif_booth[((k/2)+1)] = 3'b111;
+            default: modif_booth[((k/2)+1)] = 3'b101;
           endcase
         end
         4'b0011: begin
           case(k)
             0: modif_booth[0] = 3'b101;
-            default: modif_booth[((k/2)+1)] = 3'b111;
+            default: modif_booth[((k/2)+1)] = 3'b101;
           endcase
         end
         default: modif_booth[(k/2)+1] = 0; //default value
@@ -238,7 +238,7 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
         end //sign_multiplier == 1
            
         else begin
-          if(count <= 31) begin
+          if(count <= ((num_bits/2) + 1)) begin
                 signed_partial_product <= (signed_partial_product >> 1);
         		multiplier_booth_recoded <= multiplier_booth_recoded >> 3;
         	end //if count
@@ -249,11 +249,6 @@ module shift_add_seq_multiplier#(parameter bit [9:0] num_bits = 32, parameter bi
     
       
   end : shift_operation
-  
-  
- 
-  
-endmodule
   
   
  
